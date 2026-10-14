@@ -1,0 +1,251 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChakravyuhBreaker | Real-Time Route Optimizer</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+    #sidebar { width: 390px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; z-index: 2; }
+    #map-container { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    h1 { font-size: 1.25rem; color: #38bdf8; margin-bottom: 4px; }
+    .subtitle { font-size: 0.8rem; color: #94a3b8; margin-bottom: 16px; }
+    .btn { width: 100%; padding: 10px 14px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 8px; transition: 0.2s; }
+    .btn-primary { background: #0284c7; color: white; }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-ws { background: #10b981; color: white; }
+    .btn-ws:hover { background: #059669; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    .btn-secondary:hover { background: #475569; }
+    .card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 0.85rem; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; }
+    .badge-hit { background: #065f46; color: #34d399; }
+    .badge-miss { background: #1e3a8a; color: #93c5fd; }
+    .conflict { color: #f87171; margin-top: 6px; font-size: 0.8rem; }
+    .route-item { border-left: 4px solid #38bdf8; padding-left: 10px; margin-top: 8px; }
+    .hint { font-size: 0.78rem; color: #cbd5e1; background: #334155; padding: 8px; border-radius: 6px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div id="root" style="display:flex; width:100%; height:100%;"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const INITIAL_DEPOT = { id: "DEPOT-CP", lat: 28.6315, lng: 77.2167 };
+    const INITIAL_STOPS = [
+      { id: "ORD-101", lat: 28.6519, lng: 77.1909, demand_weight: 4.0, start_min: 540, end_min: 600 },
+      { id: "ORD-102", lat: 28.6448, lng: 77.2490, demand_weight: 5.0, start_min: 570, end_min: 630 },
+      { id: "ORD-103", lat: 28.5921, lng: 77.2290, demand_weight: 4.0, start_min: 610, end_min: 670 },
+      { id: "ORD-104", lat: 28.5672, lng: 77.2100, demand_weight: 6.0, start_min: 660, end_min: 720 },
+      { id: "ORD-105", lat: 28.6139, lng: 77.2773, demand_weight: 5.0, start_min: 700, end_min: 760 },
+      { id: "ORD-106", lat: 28.5494, lng: 77.2001, demand_weight: 4.0, start_min: 750, end_min: 810 }
+    ];
+    const COLORS = ["#38bdf8", "#f43f5e", "#a855f7", "#eab308"];
+
+    function App() {
+      const [stops, setStops] = useState(INITIAL_STOPS);
+      const [capacity, setCapacity] = useState(14.0);
+      const [result, setResult] = useState(null);
+      const [telemetryStatus, setTelemetryStatus] = useState("Idle");
+      const mapRef = useRef(null);
+      const markersRef = useRef([]);
+      const vehicleMarkerRef = useRef(null);
+
+      useEffect(() => {
+        const map = new maplibregl.Map({
+          container: "map",
+          style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+          center: [INITIAL_DEPOT.lng, INITIAL_DEPOT.lat],
+          zoom: 11.2
+        });
+
+        map.on("click", (e) => {
+          const newId = `ORD-${101 + Math.floor(Math.random() * 899)}`;
+          setStops((prev) => [
+            ...prev,
+            {
+              id: newId,
+              lat: Number(e.lngLat.lat.toFixed(4)),
+              lng: Number(e.lngLat.lng.toFixed(4)),
+              demand_weight: 4.0,
+              start_min: 560,
+              end_min: 620
+            }
+          ]);
+        });
+
+        mapRef.current = map;
+        return () => map.remove();
+      }, []);
+
+      useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        markersRef.current.forEach((m) => m.remove());
+        markersRef.current = [];
+
+        // Depot Marker
+        const depotEl = document.createElement("div");
+        depotEl.style.cssText = "background:#22c55e;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 0 8px #22c55e;";
+        const depotMarker = new maplibregl.Marker({ element: depotEl })
+          .setLngLat([INITIAL_DEPOT.lng, INITIAL_DEPOT.lat])
+          .setPopup(new maplibregl.Popup().setHTML("<b>Main Hub (Depot)</b>"))
+          .addTo(map);
+        markersRef.current.push(depotMarker);
+
+        // Stop Markers
+        stops.forEach((s) => {
+          const el = document.createElement("div");
+          el.style.cssText = "background:#f97316;width:13px;height:13px;border-radius:50%;border:2px solid white;";
+          const m = new maplibregl.Marker({ element: el })
+            .setLngLat([s.lng, s.lat])
+            .setPopup(new maplibregl.Popup().setHTML(`<b>${s.id}</b><br/>Weight: ${s.demand_weight}kg`))
+            .addTo(map);
+          markersRef.current.push(m);
+        });
+      }, [stops]);
+
+      const optimizeRoutes = async () => {
+        const res = await fetch("/api/v1/optimize-routes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ depot: INITIAL_DEPOT, stops, vehicle_capacity: Number(capacity) })
+        });
+        const data = await res.json();
+        setResult(data);
+        drawRoutes(data.fleet_routes);
+      };
+
+      const drawRoutes = (fleetRoutes) => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        for (let i = 0; i < 10; i++) {
+          if (map.getLayer(`route-line-${i}`)) map.removeLayer(`route-line-${i}`);
+          if (map.getSource(`route-${i}`)) map.removeSource(`route-${i}`);
+        }
+
+        fleetRoutes.forEach((route, idx) => {
+          const coords = route.coordinates.map((c) => [c.lng, c.lat]);
+          map.addSource(`route-${idx}`, {
+            type: "geojson",
+            data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } }
+          });
+          map.addLayer({
+            id: `route-line-${idx}`,
+            type: "line",
+            source: `route-${idx}`,
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: { "line-color": COLORS[idx % COLORS.length], "line-width": 4 }
+          });
+        });
+      };
+
+      const startTelemetry = () => {
+        if (!result || !result.fleet_routes.length) return;
+        const route = result.fleet_routes[0];
+        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/telemetry/${route.vehicle_id}`);
+
+        ws.onopen = () => {
+          setTelemetryStatus(`Streaming ${route.vehicle_id}...`);
+          ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 450 }));
+        };
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.status === "EN_ROUTE") {
+            const { lat, lng, id } = msg.current_position;
+            setTelemetryStatus(`${msg.vehicle_id} -> At ${id} (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
+            if (!vehicleMarkerRef.current) {
+              const el = document.createElement("div");
+              el.style.cssText = "background:#fde047;width:20px;height:20px;border-radius:50%;border:3px solid #000;box-shadow:0 0 12px #fde047;";
+              vehicleMarkerRef.current = new maplibregl.Marker({ element: el })
+                .setLngLat([lng, lat])
+                .addTo(mapRef.current);
+            } else {
+              vehicleMarkerRef.current.setLngLat([lng, lat]);
+            }
+          } else if (msg.status === "COMPLETED") {
+            setTelemetryStatus(`${msg.vehicle_id} Tour Completed!`);
+            ws.close();
+          }
+        };
+      };
+
+      return (
+        <>
+          <div id="sidebar">
+            <h1>ChakravyuhBreaker</h1>
+            <div className="subtitle">Dynamic Multi-Stop CVRP & Graph Routing Engine</div>
+
+            <div className="hint">
+              💡 <b>Tip:</b> Click anywhere on the map to add extra customer delivery stops! ({stops.length} active stops)
+            </div>
+
+            <button className="btn btn-primary" onClick={optimizeRoutes}>
+              ⚡ Optimize Routes (2-Opt + CVRP)
+            </button>
+
+            <button className="btn btn-ws" onClick={startTelemetry} disabled={!result}>
+              📡 Stream Live WebSocket Telemetry
+            </button>
+
+            <button className="btn btn-secondary" onClick={() => { setStops(INITIAL_STOPS); setResult(null); }}>
+              🔄 Reset Stops
+            </button>
+
+            <div className="card">
+              <b>Live Telemetry:</b> <span>{telemetryStatus}</span>
+            </div>
+
+            {result && (
+              <>
+                <div className="card">
+                  <div>
+                    <b>Engine Status:</b>
+                    <span className={`badge ${result.cache_hit ? "badge-hit" : "badge-miss"}`}>
+                      {result.cache_hit ? "REDIS/MEMORY CACHE HIT" : "FRESH GRAPH COMPUTE"}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: "6px" }}>
+                    <b>QuadTree Subdivided:</b> {result.spatial_quadtree_subdivided ? "Yes (O(log N) Active)" : "No"}
+                  </div>
+                  <div><b>Vehicles Dispatched:</b> {result.total_vehicles_dispatched}</div>
+
+                  {result.schedule_conflicts.length > 0 && (
+                    <div className="conflict">
+                      ⚠️ <b>Interval Tree Alert:</b> {result.schedule_conflicts.length} overlapping delivery time-window(s) detected!
+                    </div>
+                  )}
+                </div>
+
+                {result.fleet_routes.map((r, idx) => (
+                  <div className="card route-item" key={r.vehicle_id} style={{ borderLeftColor: COLORS[idx % COLORS.length] }}>
+                    <b>{r.vehicle_id}</b> — {r.total_distance_km} km ({r.total_load}/{r.capacity} kg)
+                    <div style={{ fontSize: "0.76rem", color: "#94a3b8", marginTop: "4px" }}>
+                      {r.stop_ids.join(" ➔ ")}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+          <div id="map-container"><div id="map"></div></div>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

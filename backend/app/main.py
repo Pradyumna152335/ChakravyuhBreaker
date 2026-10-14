@@ -1,9 +1,11 @@
 ﻿import hashlib
 import json
 import asyncio
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 try:
@@ -21,7 +23,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Allow our React frontend to talk to this backend server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,6 +30,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+FRONTEND_HTML = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
 
 
 class HybridCache:
@@ -65,8 +68,6 @@ class HybridCache:
 cache = HybridCache()
 
 
-# --- Input Data Models (Pydantic validates incoming JSON automatically) ---
-
 class StopInput(BaseModel):
     id: str = Field(..., examples=["ORD-101"])
     lat: float = Field(..., examples=[28.6139])
@@ -88,7 +89,11 @@ class OptimizeRequest(BaseModel):
     vehicle_capacity: float = Field(default=15.0, gt=0)
 
 
-# --- API Endpoints ---
+@app.get("/")
+def serve_dashboard():
+    """Serves the interactive React + MapLibre GL frontend dashboard."""
+    return FileResponse(FRONTEND_HTML)
+
 
 @app.get("/health")
 def health_check():
@@ -102,13 +107,6 @@ def health_check():
 
 @app.post("/api/v1/optimize-routes")
 def optimize_routes(payload: OptimizeRequest):
-    """
-    1. Checks Redis cache for identical route requests.
-    2. Indexes stops in a 2D QuadTree for spatial clustering.
-    3. Validates delivery time windows using an Interval Tree.
-    4. Solves CVRP with 2-Opt untangling and caches the result.
-    """
-    # Create a unique fingerprint (hash) of the request payload for caching
     payload_json = payload.model_dump_json()
     cache_key = "route_opt:" + hashlib.sha256(payload_json.encode()).hexdigest()
 
@@ -117,7 +115,6 @@ def optimize_routes(payload: OptimizeRequest):
         cached_result["cache_hit"] = True
         return cached_result
 
-    # 1. Index all delivery stops into our QuadTree
     boundary = BoundingBox(
         center_lat=payload.depot.lat,
         center_lng=payload.depot.lng,
@@ -126,7 +123,6 @@ def optimize_routes(payload: OptimizeRequest):
     )
     quadtree = QuadTree(boundary=boundary, capacity=4)
 
-    # 2. Check time-window overlaps using our Interval Tree
     interval_tree = IntervalTree()
     time_conflicts = []
 
@@ -147,7 +143,6 @@ def optimize_routes(payload: OptimizeRequest):
             LocationNode(id=stop.id, lat=stop.lat, lng=stop.lng, demand_weight=stop.demand_weight)
         )
 
-    # 3. Solve CVRP + 2-Opt Route Optimization
     depot_node = LocationNode(id=payload.depot.id, lat=payload.depot.lat, lng=payload.depot.lng)
     fleet_routes = solve_cvrp(depot=depot_node, stops=location_nodes, vehicle_capacity=payload.vehicle_capacity)
 
@@ -165,20 +160,18 @@ def optimize_routes(payload: OptimizeRequest):
 
 @app.websocket("/ws/telemetry/{vehicle_id}")
 async def vehicle_telemetry_ws(websocket: WebSocket, vehicle_id: str):
-    """
-    Streams live simulated GPS coordinates of a vehicle over WebSockets.
-    """
     await websocket.accept()
     try:
         data = await websocket.receive_json()
         waypoints = data.get("coordinates", [])
+        delay_sec = data.get("delay_ms", 50) / 1000.0
         for point in waypoints:
             await websocket.send_json({
                 "vehicle_id": vehicle_id,
                 "status": "EN_ROUTE",
                 "current_position": point,
             })
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(delay_sec)
         await websocket.send_json({"vehicle_id": vehicle_id, "status": "COMPLETED"})
     except WebSocketDisconnect:
         pass
