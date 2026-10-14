@@ -7,8 +7,4 @@
 * **Algorithms:** A* Search, 2-Opt Local Search, QuadTree (spatial index), Interval Tree (time-window validation)
 * **Frontend:** React, MapLibre GL Interactive Map Dashboard
 
-## Quick Start
-
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/Pradyumna152335/ChakravyuhBreaker.git](https://github.com/Pradyumna152335/ChakravyuhBreaker.git)
+<img width="953" height="409" alt="image" src="https://github.com/user-attachments/assets/c3821341-d1d1-4c6c-82b9-437599fd1b50" />
