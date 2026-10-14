@@ -9,6 +9,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
+app = FastAPI(
+    title="ChakravyuhBreaker Routing Engine API",
+    description="Real-Time Dynamic Delivery & Multi-Stop Route Optimizer using A*, 2-Opt, QuadTree, and Interval Tree.",
+    version="1.0.0",
+)
+
 # Mount static folder
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
@@ -25,11 +31,7 @@ from backend.app.algorithms.quadtree import DeliveryPoint, BoundingBox, QuadTree
 from backend.app.algorithms.interval_tree import TimeWindow, IntervalTree
 from backend.app.algorithms.routing_engine import LocationNode, RoadGraph, solve_cvrp
 
-app = FastAPI(
-    title="ChakravyuhBreaker Routing Engine API",
-    description="Real-Time Dynamic Delivery & Multi-Stop Route Optimizer using A*, 2-Opt, QuadTree, and Interval Tree.",
-    version="1.0.0",
-)
+
 
 app.add_middleware(
     CORSMiddleware,

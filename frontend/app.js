@@ -16,7 +16,8 @@ function App() {
   const [gpsStatus, setGpsStatus] = useState("Idle (Click permission below)");
   const mapRef = useRef(null);
   const markersRef = useRef([]);
-  const vehicleMarkerRef = useRef(null);
+  const vehicleMarkersRef = useRef({}); // Track multiple vehicle markers by vehicle_id
+  const activeWebSocketsRef = useRef([]);
 
   useEffect(() => {
     const map = new maplibregl.Map({
@@ -80,10 +81,13 @@ function App() {
       if (map.getLayer(`route-line-${i}`)) map.removeLayer(`route-line-${i}`);
       if (map.getSource(`route-${i}`)) map.removeSource(`route-${i}`);
     }
-    if (vehicleMarkerRef.current) {
-      vehicleMarkerRef.current.remove();
-      vehicleMarkerRef.current = null;
-    }
+    // Close active WebSockets
+    activeWebSocketsRef.current.forEach(ws => ws.close());
+    activeWebSocketsRef.current = [];
+
+    // Clear all vehicle markers
+    Object.values(vehicleMarkersRef.current).forEach(marker => marker.remove());
+    vehicleMarkersRef.current = {};
   };
 
   const handleReset = () => {
@@ -148,36 +152,53 @@ function App() {
     });
   };
 
-  const startTelemetry = () => {
+  const startMultiVehicleSimulation = () => {
     if (!result || !result.fleet_routes.length) return;
-    const route = result.fleet_routes[0];
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/telemetry/${route.vehicle_id}`);
+    
+    // Clear any existing simulation markers/sockets first
+    Object.values(vehicleMarkersRef.current).forEach(marker => marker.remove());
+    vehicleMarkersRef.current = {};
+    activeWebSocketsRef.current.forEach(ws => ws.close());
+    activeWebSocketsRef.current = [];
 
-    ws.onopen = () => {
-      setGpsStatus(`Streaming GPS telemetry...`);
-      ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 500 }));
-    };
+    setGpsStatus("🚀 Multi-Partner GPS Fleet Simulation Active...");
 
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.status === "EN_ROUTE") {
-        const { lat, lng, id } = msg.current_position;
-        setGpsStatus(`🚚 Vehicle visiting stop ${id}`);
-        if (!vehicleMarkerRef.current) {
-          const el = document.createElement("div");
-          el.style.cssText = "background:#fde047;width:22px;height:22px;border-radius:50%;border:3px solid #000;box-shadow:0 0 12px #fde047;";
-          vehicleMarkerRef.current = new maplibregl.Marker({ element: el })
-            .setLngLat([lng, lat])
-            .addTo(mapRef.current);
-        } else {
-          vehicleMarkerRef.current.setLngLat([lng, lat]);
+    result.fleet_routes.forEach((route, idx) => {
+      const vehicleColor = COLORS[idx % COLORS.length];
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/telemetry/${route.vehicle_id}`);
+
+      activeWebSocketsRef.current.push(ws);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 600 }));
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.status === "EN_ROUTE") {
+          const { lat, lng, id } = msg.current_position;
+          
+          if (!vehicleMarkersRef.current[route.vehicle_id]) {
+            // Create distinct style for each partner vehicle (unique shape, border, and color glow)
+            const el = document.createElement("div");
+            el.innerHTML = `📍`;
+            el.style.cssText = `background:${vehicleColor};color:#000;font-size:14px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:2px solid #ffffff;box-shadow:0 0 14px ${vehicleColor};cursor:pointer;`;
+            
+            const marker = new maplibregl.Marker({ element: el })
+              .setLngLat([lng, lat])
+              .setPopup(new maplibregl.Popup().setHTML(`<b>${route.vehicle_id}</b><br/>Style Color: ${vehicleColor}`))
+              .addTo(mapRef.current);
+
+            vehicleMarkersRef.current[route.vehicle_id] = marker;
+          } else {
+            vehicleMarkersRef.current[route.vehicle_id].setLngLat([lng, lat]);
+          }
+        } else if (msg.status === "COMPLETED") {
+          setGpsStatus(`✅ ${route.vehicle_id} completed deliveries!`);
         }
-      } else if (msg.status === "COMPLETED") {
-        setGpsStatus(`✅ Route completed successfully!`);
-        ws.close();
-      }
-    };
+      };
+    });
   };
 
   return (
@@ -189,15 +210,15 @@ function App() {
         <div className="section-title">How to Use</div>
         <div className="instruction-box">
           🖱️ <b>Click anywhere on the map</b> to add custom delivery stops dynamically.<br/>
-          ⚙️ Adjust bike payload and request GPS permission below.
+          ⚙️ Adjust bike payload and run simulation below.
         </div>
 
         <button className="btn btn-primary" onClick={optimizeRoutes}>
           ⚡ Run Route Optimizer (CVRP + 2-Opt)
         </button>
 
-        <button className="btn btn-ws" onClick={startTelemetry} disabled={!result}>
-          📡 Watch Live Vehicle Simulation
+        <button className="btn btn-ws" onClick={startMultiVehicleSimulation} disabled={!result}>
+          📡 Watch Multi-Partner Fleet Simulation
         </button>
 
         <button className="btn btn-secondary" onClick={requestGpsPermission}>
@@ -211,7 +232,7 @@ function App() {
         <div className="card" style={{ marginTop: "10px" }}>
           <div className="stat-row">
             <span className="stat-label">Active Delivery Stops:</span>
-            <span className="stat-value" style={{ color: "#38bdf8" }}>{stops.length} locations (User Added)</span>
+            <span className="stat-value" style={{ color: "#38bdf8" }}>{stops.length} locations</span>
           </div>
           <div className="stat-row" style={{ margin: "8px 0" }}>
             <span className="stat-label">Max Bike Payload Limit:</span>
@@ -261,7 +282,7 @@ function App() {
               <div className="route-card" key={r.vehicle_id} style={{ borderLeftColor: COLORS[idx % COLORS.length] }}>
                 <div className="stat-row">
                   <b>{r.vehicle_id}</b>
-                  <span style={{ color: "#38bdf8", fontWeight: "600" }}>{r.total_distance_km} km</span>
+                  <span style={{ color: COLORS[idx % COLORS.length], fontWeight: "600" }}>{r.total_distance_km} km</span>
                 </div>
                 <div className="stat-row" style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
                   <span>Load: {r.total_load} / {r.capacity} kg</span>
