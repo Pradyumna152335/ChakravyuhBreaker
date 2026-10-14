@@ -7,6 +7,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
+
+# Mount static folder
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+def serve_dashboard():
+    return FileResponse("frontend/index.html")
 
 try:
     import redis
