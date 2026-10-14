@@ -112,7 +112,7 @@ function App() {
 
   const handleReset = () => {
     clearRoutesFromMap();
-    setStops(INITIAL_STOPS);
+    setStops(JSON.parse(JSON.stringify(INITIAL_STOPS)));
     setCapacity(15.0);
     setResult(null);
     setGpsStatus("Idle (Click permission below)");
