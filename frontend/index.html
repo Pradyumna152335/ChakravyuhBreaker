@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChakravyuhBreaker | Real-Time Route Optimizer</title>
+  <title>ChakravyuhBreaker | Live Route Optimization Dashboard</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -11,26 +11,39 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body { background: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
-    #sidebar { width: 390px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; z-index: 2; }
+    body { background: #0b0f19; color: #f1f5f9; display: flex; height: 100vh; overflow: hidden; }
+    #sidebar { width: 420px; background: #111827; border-right: 1px solid #1f2937; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; z-index: 2; box-shadow: 4px 0 20px rgba(0,0,0,0.5); }
     #map-container { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
-    h1 { font-size: 1.25rem; color: #38bdf8; margin-bottom: 4px; }
-    .subtitle { font-size: 0.8rem; color: #94a3b8; margin-bottom: 16px; }
-    .btn { width: 100%; padding: 10px 14px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 8px; transition: 0.2s; }
-    .btn-primary { background: #0284c7; color: white; }
-    .btn-primary:hover { background: #0369a1; }
-    .btn-ws { background: #10b981; color: white; }
-    .btn-ws:hover { background: #059669; }
-    .btn-secondary { background: #334155; color: #e2e8f0; }
-    .btn-secondary:hover { background: #475569; }
-    .card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 0.85rem; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; }
-    .badge-hit { background: #065f46; color: #34d399; }
-    .badge-miss { background: #1e3a8a; color: #93c5fd; }
-    .conflict { color: #f87171; margin-top: 6px; font-size: 0.8rem; }
-    .route-item { border-left: 4px solid #38bdf8; padding-left: 10px; margin-top: 8px; }
-    .hint { font-size: 0.78rem; color: #cbd5e1; background: #334155; padding: 8px; border-radius: 6px; margin-bottom: 12px; }
+    
+    h1 { font-size: 1.4rem; color: #38bdf8; margin-bottom: 6px; font-weight: 700; letter-spacing: -0.5px; }
+    .subtitle { font-size: 0.85rem; color: #9ca3af; margin-bottom: 20px; line-height: 1.4; }
+    
+    .section-title { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #60a5fa; margin-bottom: 8px; font-weight: 600; }
+    
+    .instruction-box { background: #1f2937; border-left: 4px solid #38bdf8; padding: 12px; border-radius: 0 8px 8px 0; font-size: 0.84rem; color: #e5e7eb; margin-bottom: 16px; line-height: 1.5; }
+    
+    .btn { width: 100%; padding: 12px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: all 0.2s ease; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary { background: #0ea5e9; color: white; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3); }
+    .btn-primary:hover { background: #0284c7; transform: translateY(-1px); }
+    .btn-ws { background: #10b981; color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+    .btn-ws:hover { background: #059669; transform: translateY(-1px); }
+    .btn-secondary { background: #374151; color: #f3f4f6; }
+    .btn-secondary:hover { background: #4b5563; }
+    .btn:disabled { background: #374151; color: #6b7280; cursor: not-allowed; box-shadow: none; transform: none; }
+
+    .card { background: #1f2937; border: 1px solid #374151; border-radius: 10px; padding: 14px; margin-bottom: 14px; font-size: 0.88rem; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+    .badge-hit { background: #064e3b; color: #34d399; border: 1px solid #059669; }
+    .badge-miss { background: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb; }
+    
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .stat-label { color: #9ca3af; }
+    .stat-value { font-weight: 600; color: #f9fafb; }
+    
+    .conflict-alert { background: #7f1d1d; border: 1px solid #991b1b; color: #fca5a5; padding: 10px; border-radius: 8px; margin-top: 8px; font-size: 0.82rem; }
+    .route-card { border-left: 4px solid #38bdf8; padding-left: 12px; margin-top: 10px; background: #111827; padding: 10px 12px; border-radius: 0 8px 8px 0; }
+    .route-path { font-size: 0.78rem; color: #9ca3af; margin-top: 6px; font-family: monospace; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -39,22 +52,20 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const INITIAL_DEPOT = { id: "DEPOT-CP", lat: 28.6315, lng: 77.2167 };
+    const INITIAL_DEPOT = { id: "MAIN-HUB", lat: 28.6315, lng: 77.2167 };
     const INITIAL_STOPS = [
-      { id: "ORD-101", lat: 28.6519, lng: 77.1909, demand_weight: 4.0, start_min: 540, end_min: 600 },
-      { id: "ORD-102", lat: 28.6448, lng: 77.2490, demand_weight: 5.0, start_min: 570, end_min: 630 },
-      { id: "ORD-103", lat: 28.5921, lng: 77.2290, demand_weight: 4.0, start_min: 610, end_min: 670 },
-      { id: "ORD-104", lat: 28.5672, lng: 77.2100, demand_weight: 6.0, start_min: 660, end_min: 720 },
-      { id: "ORD-105", lat: 28.6139, lng: 77.2773, demand_weight: 5.0, start_min: 700, end_min: 760 },
-      { id: "ORD-106", lat: 28.5494, lng: 77.2001, demand_weight: 4.0, start_min: 750, end_min: 810 }
+      { id: "ORD-201", lat: 28.6519, lng: 77.1909, demand_weight: 4.0, start_min: 540, end_min: 600 },
+      { id: "ORD-202", lat: 28.6448, lng: 77.2490, demand_weight: 5.0, start_min: 570, end_min: 630 },
+      { id: "ORD-203", lat: 28.5921, lng: 77.2290, demand_weight: 4.0, start_min: 610, end_min: 670 },
+      { id: "ORD-204", lat: 28.5672, lng: 77.2100, demand_weight: 6.0, start_min: 660, end_min: 720 }
     ];
     const COLORS = ["#38bdf8", "#f43f5e", "#a855f7", "#eab308"];
 
     function App() {
       const [stops, setStops] = useState(INITIAL_STOPS);
-      const [capacity, setCapacity] = useState(14.0);
+      const [capacity, setCapacity] = useState(15.0);
       const [result, setResult] = useState(null);
-      const [telemetryStatus, setTelemetryStatus] = useState("Idle");
+      const [telemetryStatus, setTelemetryStatus] = useState("Waiting to start tour...");
       const mapRef = useRef(null);
       const markersRef = useRef([]);
       const vehicleMarkerRef = useRef(null);
@@ -64,20 +75,20 @@
           container: "map",
           style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
           center: [INITIAL_DEPOT.lng, INITIAL_DEPOT.lat],
-          zoom: 11.2
+          zoom: 11.5
         });
 
         map.on("click", (e) => {
-          const newId = `ORD-${101 + Math.floor(Math.random() * 899)}`;
+          const newId = `ORD-${Math.floor(205 + Math.random() * 794)}`;
           setStops((prev) => [
             ...prev,
             {
               id: newId,
               lat: Number(e.lngLat.lat.toFixed(4)),
               lng: Number(e.lngLat.lng.toFixed(4)),
-              demand_weight: 4.0,
-              start_min: 560,
-              end_min: 620
+              demand_weight: 3.5,
+              start_min: 600,
+              end_min: 660
             }
           ]);
         });
@@ -93,22 +104,22 @@
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
 
-        // Depot Marker
+        // Depot Marker (Green)
         const depotEl = document.createElement("div");
-        depotEl.style.cssText = "background:#22c55e;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 0 8px #22c55e;";
+        depotEl.style.cssText = "background:#22c55e;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px #22c55e;";
         const depotMarker = new maplibregl.Marker({ element: depotEl })
           .setLngLat([INITIAL_DEPOT.lng, INITIAL_DEPOT.lat])
-          .setPopup(new maplibregl.Popup().setHTML("<b>Main Hub (Depot)</b>"))
+          .setPopup(new maplibregl.Popup().setHTML("<b>Central Warehouse Hub</b><br/>Starting point for all delivery vehicles."))
           .addTo(map);
         markersRef.current.push(depotMarker);
 
-        // Stop Markers
+        // Stop Markers (Orange)
         stops.forEach((s) => {
           const el = document.createElement("div");
-          el.style.cssText = "background:#f97316;width:13px;height:13px;border-radius:50%;border:2px solid white;";
+          el.style.cssText = "background:#f97316;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px #f97316;";
           const m = new maplibregl.Marker({ element: el })
             .setLngLat([s.lng, s.lat])
-            .setPopup(new maplibregl.Popup().setHTML(`<b>${s.id}</b><br/>Weight: ${s.demand_weight}kg`))
+            .setPopup(new maplibregl.Popup().setHTML(`<b>Order: ${s.id}</b><br/>Package Weight: ${s.demand_weight} kg<br/>Time Window: 09:00 - 10:00 AM`))
             .addTo(map);
           markersRef.current.push(m);
         });
@@ -145,7 +156,7 @@
             type: "line",
             source: `route-${idx}`,
             layout: { "line-join": "round", "line-cap": "round" },
-            paint: { "line-color": COLORS[idx % COLORS.length], "line-width": 4 }
+            paint: { "line-color": COLORS[idx % COLORS.length], "line-width": 5 }
           });
         });
       };
@@ -157,18 +168,18 @@
         const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/telemetry/${route.vehicle_id}`);
 
         ws.onopen = () => {
-          setTelemetryStatus(`Streaming ${route.vehicle_id}...`);
-          ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 450 }));
+          setTelemetryStatus(`Connected! Streaming GPS for ${route.vehicle_id}...`);
+          ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 500 }));
         };
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data);
           if (msg.status === "EN_ROUTE") {
             const { lat, lng, id } = msg.current_position;
-            setTelemetryStatus(`${msg.vehicle_id} -> At ${id} (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
+            setTelemetryStatus(`🚚 Vehicle moving: currently visiting stop ${id}`);
             if (!vehicleMarkerRef.current) {
               const el = document.createElement("div");
-              el.style.cssText = "background:#fde047;width:20px;height:20px;border-radius:50%;border:3px solid #000;box-shadow:0 0 12px #fde047;";
+              el.style.cssText = "background:#fde047;width:22px;height:22px;border-radius:50%;border:3px solid #000;box-shadow:0 0 12px #fde047;";
               vehicleMarkerRef.current = new maplibregl.Marker({ element: el })
                 .setLngLat([lng, lat])
                 .addTo(mapRef.current);
@@ -176,7 +187,7 @@
               vehicleMarkerRef.current.setLngLat([lng, lat]);
             }
           } else if (msg.status === "COMPLETED") {
-            setTelemetryStatus(`${msg.vehicle_id} Tour Completed!`);
+            setTelemetryStatus(`✅ ${msg.vehicle_id} successfully completed all deliveries!`);
             ws.close();
           }
         };
@@ -186,53 +197,78 @@
         <>
           <div id="sidebar">
             <h1>ChakravyuhBreaker</h1>
-            <div className="subtitle">Dynamic Multi-Stop CVRP & Graph Routing Engine</div>
+            <div className="subtitle">AI Logistics & Route Optimization Command Center</div>
 
-            <div className="hint">
-              💡 <b>Tip:</b> Click anywhere on the map to add extra customer delivery stops! ({stops.length} active stops)
+            <div className="section-title">How to Use</div>
+            <div className="instruction-box">
+              🖱️ <b>Click anywhere on the dark map</b> to drop new customer delivery locations.<br/><br/>
+              ⚡ Click <b>Optimize Routes</b> to group orders and calculate the shortest paths without overloading delivery bikes.
             </div>
 
             <button className="btn btn-primary" onClick={optimizeRoutes}>
-              ⚡ Optimize Routes (2-Opt + CVRP)
+              ⚡ Run Route Optimizer (CVRP + 2-Opt)
             </button>
 
             <button className="btn btn-ws" onClick={startTelemetry} disabled={!result}>
-              📡 Stream Live WebSocket Telemetry
+              📡 Watch Live Vehicle GPS Simulation
             </button>
 
-            <button className="btn btn-secondary" onClick={() => { setStops(INITIAL_STOPS); setResult(null); }}>
-              🔄 Reset Stops
+            <button className="btn btn-secondary" onClick={() => { setStops(INITIAL_STOPS); setResult(null); if(vehicleMarkerRef.current) { vehicleMarkerRef.current.remove(); vehicleMarkerRef.current = null; } }}>
+              🔄 Reset to Default Stops
             </button>
 
-            <div className="card">
-              <b>Live Telemetry:</b> <span>{telemetryStatus}</span>
+            <div className="card" style={{ marginTop: "12px" }}>
+              <div className="stat-row">
+                <span className="stat-label">Active Delivery Stops:</span>
+                <span className="stat-value">{stops.length} locations</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Max Bike Payload Limit:</span>
+                <span className="stat-value">{capacity} kg</span>
+              </div>
+              <div className="stat-row" style={{ marginTop: "8px", borderTop: "1px solid #374151", paddingTop: "8px" }}>
+                <span className="stat-label">Live GPS Status:</span>
+                <span className="stat-value" style={{ color: "#34d399" }}>{telemetryStatus}</span>
+              </div>
             </div>
 
             {result && (
               <>
+                <div className="section-title" style={{ marginTop: "8px" }}>Engine Analytics</div>
                 <div className="card">
-                  <div>
-                    <b>Engine Status:</b>
+                  <div className="stat-row" style={{ alignItems: "center", marginBottom: "8px" }}>
+                    <span className="stat-label">Cache Engine:</span>
                     <span className={`badge ${result.cache_hit ? "badge-hit" : "badge-miss"}`}>
-                      {result.cache_hit ? "REDIS/MEMORY CACHE HIT" : "FRESH GRAPH COMPUTE"}
+                      {result.cache_hit ? "⚡ INSTANT REDIS CACHE HIT" : "⚙️ FRESH GRAPH COMPUTE"}
                     </span>
                   </div>
-                  <div style={{ marginTop: "6px" }}>
-                    <b>QuadTree Subdivided:</b> {result.spatial_quadtree_subdivided ? "Yes (O(log N) Active)" : "No"}
+                  <div className="stat-row">
+                    <span className="stat-label">Spatial Indexing (QuadTree):</span>
+                    <span className="stat-value">{result.spatial_quadtree_subdivided ? "Active (O log N)" : "Balanced"}</span>
                   </div>
-                  <div><b>Vehicles Dispatched:</b> {result.total_vehicles_dispatched}</div>
+                  <div className="stat-row">
+                    <span className="stat-label">Vehicles Dispatched:</span>
+                    <span className="stat-value">{result.total_vehicles_dispatched} bikes</span>
+                  </div>
 
                   {result.schedule_conflicts.length > 0 && (
-                    <div className="conflict">
-                      ⚠️ <b>Interval Tree Alert:</b> {result.schedule_conflicts.length} overlapping delivery time-window(s) detected!
+                    <div className="conflict-alert">
+                      ⚠️ <b>Time Conflict Warning:</b> {result.schedule_conflicts.length} customer order(s) have overlapping delivery time windows!
                     </div>
                   )}
                 </div>
 
+                <div className="section-title">Optimized Fleet Routes</div>
                 {result.fleet_routes.map((r, idx) => (
-                  <div className="card route-item" key={r.vehicle_id} style={{ borderLeftColor: COLORS[idx % COLORS.length] }}>
-                    <b>{r.vehicle_id}</b> — {r.total_distance_km} km ({r.total_load}/{r.capacity} kg)
-                    <div style={{ fontSize: "0.76rem", color: "#94a3b8", marginTop: "4px" }}>
+                  <div className="route-card" key={r.vehicle_id} style={{ borderLeftColor: COLORS[idx % COLORS.length] }}>
+                    <div className="stat-row">
+                      <b>{r.vehicle_id}</b>
+                      <span style={{ color: "#38bdf8", fontWeight: "600" }}>{r.total_distance_km} km</span>
+                    </div>
+                    <div className="stat-row" style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                      <span>Carried Load: {r.total_load} / {r.capacity} kg</span>
+                    </div>
+                    <div className="route-path">
                       {r.stop_ids.join(" ➔ ")}
                     </div>
                   </div>
