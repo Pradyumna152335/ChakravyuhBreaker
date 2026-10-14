@@ -7,22 +7,23 @@ const INITIAL_STOPS = [
   { id: "ORD-203", lat: 28.5921, lng: 77.2290, demand_weight: 4.0, start_min: 610, end_min: 670 },
   { id: "ORD-204", lat: 28.5672, lng: 77.2100, demand_weight: 6.0, start_min: 660, end_min: 720 }
 ];
-const COLORS = ["#38bdf8", "#f43f5e", "#a855f7", "#eab308"];
+const COLORS = ["#0284c7", "#e11d48", "#9333ea", "#ca8a04"];
 
 function App() {
   const [stops, setStops] = useState(INITIAL_STOPS);
   const [capacity, setCapacity] = useState(15.0);
   const [result, setResult] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("Idle (Click permission below)");
+  const [showModal, setShowModal] = useState(false);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
-  const vehicleMarkersRef = useRef({}); // Track multiple vehicle markers by vehicle_id
-  const activeWebSocketsRef = useRef([]);
+  const vehicleMarkerRef = useRef(null);
+  const activeWsRef = useRef(null);
 
   useEffect(() => {
     const map = new maplibregl.Map({
       container: "map",
-      style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
       center: [INITIAL_DEPOT.lng, INITIAL_DEPOT.lat],
       zoom: 11.5
     });
@@ -55,24 +56,42 @@ function App() {
 
     // Depot Marker
     const depotEl = document.createElement("div");
-    depotEl.style.cssText = "background:#22c55e;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px #22c55e;";
+    depotEl.style.cssText = "background:#16a34a;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px #16a34a;";
     const depotMarker = new maplibregl.Marker({ element: depotEl })
       .setLngLat([INITIAL_DEPOT.lng, INITIAL_DEPOT.lat])
       .setPopup(new maplibregl.Popup().setHTML("<b>Central Warehouse Hub</b>"))
       .addTo(map);
     markersRef.current.push(depotMarker);
 
-    // Stop Markers
+    // Stop Markers with Order ID Labels
     stops.forEach((s) => {
       const el = document.createElement("div");
-      el.style.cssText = "background:#f97316;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px #f97316;";
-      const m = new maplibregl.Marker({ element: el })
+      el.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+      el.innerHTML = `
+        <div style="background:#ea580c;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px #ea580c;flex-shrink:0;"></div>
+        <div style="background:rgba(15, 23, 42, 0.85);color:#38bdf8;padding:2px 6px;border-radius:4px;font-size:0.72rem;font-weight:700;border:1px solid rgba(56,189,248,0.3);white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.3);">${s.id}</div>
+      `;
+      
+      const m = new maplibregl.Marker({ element: el, anchor: "left" })
         .setLngLat([s.lng, s.lat])
-        .setPopup(new maplibregl.Popup().setHTML(`<b>Order: ${s.id}</b><br/>Weight: ${s.demand_weight} kg`))
+        .setPopup(new maplibregl.Popup().setHTML(`<b>Order: ${s.id}</b><br/>Weight: ${s.demand_weight} kg<br/>Lat/Lng: ${s.lat}, ${s.lng}`))
         .addTo(map);
       markersRef.current.push(m);
     });
   }, [stops]);
+
+  const updateStopWeight = (index, newWeight) => {
+    const updatedStops = [...stops];
+    updatedStops[index].demand_weight = Math.max(0.1, Number(newWeight));
+    setStops(updatedStops);
+  };
+
+  const adjustWeight = (index, delta) => {
+    const updatedStops = [...stops];
+    const current = updatedStops[index].demand_weight;
+    updatedStops[index].demand_weight = Number(Math.max(0.5, (current + delta)).toFixed(1));
+    setStops(updatedStops);
+  };
 
   const clearRoutesFromMap = () => {
     const map = mapRef.current;
@@ -81,13 +100,14 @@ function App() {
       if (map.getLayer(`route-line-${i}`)) map.removeLayer(`route-line-${i}`);
       if (map.getSource(`route-${i}`)) map.removeSource(`route-${i}`);
     }
-    // Close active WebSockets
-    activeWebSocketsRef.current.forEach(ws => ws.close());
-    activeWebSocketsRef.current = [];
-
-    // Clear all vehicle markers
-    Object.values(vehicleMarkersRef.current).forEach(marker => marker.remove());
-    vehicleMarkersRef.current = {};
+    if (activeWsRef.current) {
+      activeWsRef.current.close();
+      activeWsRef.current = null;
+    }
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.remove();
+      vehicleMarkerRef.current = null;
+    }
   };
 
   const handleReset = () => {
@@ -127,98 +147,165 @@ function App() {
     });
     const data = await res.json();
     setResult(data);
-    drawRoutes(data.fleet_routes);
+    drawRoutesSequentially(data.fleet_routes);
   };
 
-  const drawRoutes = (fleetRoutes) => {
+  const drawRoutesSequentially = async (fleetRoutes) => {
     const map = mapRef.current;
     if (!map) return;
 
     clearRoutesFromMap();
 
-    fleetRoutes.forEach((route, idx) => {
-      const coords = route.coordinates.map((c) => [c.lng, c.lat]);
-      map.addSource(`route-${idx}`, {
+    for (let idx = 0; idx < fleetRoutes.length; idx++) {
+      const route = fleetRoutes[idx];
+      const vehicleColor = COLORS[idx % COLORS.length];
+      const fullCoords = route.coordinates.map((c) => [c.lng, c.lat]);
+      if (fullCoords.length === 0) continue;
+
+      const sourceId = `route-${idx}`;
+      const layerId = `route-line-${idx}`;
+
+      map.addSource(sourceId, {
         type: "geojson",
-        data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } }
+        data: {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [fullCoords[0]]
+          }
+        }
       });
+
       map.addLayer({
-        id: `route-line-${idx}`,
+        id: layerId,
         type: "line",
-        source: `route-${idx}`,
+        source: sourceId,
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": COLORS[idx % COLORS.length], "line-width": 5 }
+        paint: { "line-color": vehicleColor, "line-width": 5 }
       });
-    });
+
+      setGpsStatus(`✨ Drawing route for ${route.vehicle_id}...`);
+
+      for (let p = 1; p < fullCoords.length; p++) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (!mapRef.current) return;
+        const currentCoords = fullCoords.slice(0, p + 1);
+        const source = map.getSource(sourceId);
+        if (source) {
+          source.setData({
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: currentCoords
+            }
+          });
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    setGpsStatus("✅ All optimized routes rendered successfully!");
   };
 
-  const startMultiVehicleSimulation = () => {
-    if (!result || !result.fleet_routes.length) return;
-    
-    // Clear any existing simulation markers/sockets first
-    Object.values(vehicleMarkersRef.current).forEach(marker => marker.remove());
-    vehicleMarkersRef.current = {};
-    activeWebSocketsRef.current.forEach(ws => ws.close());
-    activeWebSocketsRef.current = [];
-
-    setGpsStatus("🚀 Multi-Partner GPS Fleet Simulation Active...");
-
-    result.fleet_routes.forEach((route, idx) => {
-      const vehicleColor = COLORS[idx % COLORS.length];
+  const simulateSingleRoute = (route, vehicleColor) => {
+    return new Promise((resolve) => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/telemetry/${route.vehicle_id}`);
-
-      activeWebSocketsRef.current.push(ws);
+      activeWsRef.current = ws;
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 600 }));
+        setGpsStatus(`🚚 Simulating ${route.vehicle_id} deliveries...`);
+        ws.send(JSON.stringify({ coordinates: route.coordinates, delay_ms: 400 }));
       };
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.status === "EN_ROUTE") {
           const { lat, lng, id } = msg.current_position;
-          
-          if (!vehicleMarkersRef.current[route.vehicle_id]) {
-            // Create distinct style for each partner vehicle (unique shape, border, and color glow)
+          setGpsStatus(`🚚 ${route.vehicle_id} visiting stop ${id}`);
+
+          if (!vehicleMarkerRef.current) {
             const el = document.createElement("div");
             el.innerHTML = `📍`;
-            el.style.cssText = `background:${vehicleColor};color:#000;font-size:14px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:2px solid #ffffff;box-shadow:0 0 14px ${vehicleColor};cursor:pointer;`;
+            el.style.cssText = `background:${vehicleColor};color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:2px solid #ffffff;box-shadow:0 0 14px ${vehicleColor};`;
             
-            const marker = new maplibregl.Marker({ element: el })
+            vehicleMarkerRef.current = new maplibregl.Marker({ element: el })
               .setLngLat([lng, lat])
-              .setPopup(new maplibregl.Popup().setHTML(`<b>${route.vehicle_id}</b><br/>Style Color: ${vehicleColor}`))
               .addTo(mapRef.current);
-
-            vehicleMarkersRef.current[route.vehicle_id] = marker;
           } else {
-            vehicleMarkersRef.current[route.vehicle_id].setLngLat([lng, lat]);
+            vehicleMarkerRef.current.getElement().style.background = vehicleColor;
+            vehicleMarkerRef.current.getElement().style.boxShadow = `0 0 14px ${vehicleColor}`;
+            vehicleMarkerRef.current.setLngLat([lng, lat]);
           }
         } else if (msg.status === "COMPLETED") {
-          setGpsStatus(`✅ ${route.vehicle_id} completed deliveries!`);
+          setGpsStatus(`✅ ${route.vehicle_id} completed tour!`);
+          ws.close();
+          resolve();
         }
       };
+
+      ws.onerror = () => resolve();
     });
+  };
+
+  const startSequentialSimulation = async () => {
+    if (!result || !result.fleet_routes.length) return;
+
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.remove();
+      vehicleMarkerRef.current = null;
+    }
+
+    for (let idx = 0; idx < result.fleet_routes.length; idx++) {
+      const route = result.fleet_routes[idx];
+      const vehicleColor = COLORS[idx % COLORS.length];
+      await simulateSingleRoute(route, vehicleColor);
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    setGpsStatus("🎉 All delivery partners finished their routes!");
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.remove();
+      vehicleMarkerRef.current = null;
+    }
   };
 
   return (
     <React.Fragment>
       <div id="sidebar">
+        {/* Creator Profile Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", paddingBottom: "14px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          <img 
+            src="https://github.com/Pradyumna152335.png" 
+            alt="Pradyumna Tripathi" 
+            style={{ width: "48px", height: "48px", borderRadius: "50%", border: "2px solid #0284c7", objectFit: "cover" }} 
+            onError={(e) => { e.target.src = "https://ui-avatars.com/api/?name=Pradyumna+Tripathi&background=0284c7&color=fff"; }}
+          />
+          <div>
+            <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "#f8fafc" }}>Pradyumna Tripathi</div>
+            <div style={{ fontSize: "0.75rem", color: "#0284c7" }}>Lead Software Engineer</div>
+          </div>
+        </div>
+
         <h1>ChakravyuhBreaker</h1>
         <div className="subtitle">AI Logistics & Route Optimization Command Center</div>
 
         <div className="section-title">How to Use</div>
         <div className="instruction-box">
           🖱️ <b>Click anywhere on the map</b> to add custom delivery stops dynamically.<br/>
-          ⚙️ Adjust bike payload and run simulation below.
+          ⚙️ Run optimizer and manage parcel weights below.
         </div>
 
         <button className="btn btn-primary" onClick={optimizeRoutes}>
           ⚡ Run Route Optimizer (CVRP + 2-Opt)
         </button>
 
-        <button className="btn btn-ws" onClick={startMultiVehicleSimulation} disabled={!result}>
-          📡 Watch Multi-Partner Fleet Simulation
+        <button className="btn btn-ws" onClick={startSequentialSimulation} disabled={!result}>
+          📡 Watch Sequential Fleet Simulation
+        </button>
+
+        <button className="btn btn-secondary" onClick={() => setShowModal(true)}>
+          🔍 Explain CVRP + 2-Opt Algorithm
         </button>
 
         <button className="btn btn-secondary" onClick={requestGpsPermission}>
@@ -229,12 +316,36 @@ function App() {
           🔄 Reset to Default Stops
         </button>
 
-        <div className="card" style={{ marginTop: "10px" }}>
-          <div className="stat-row">
-            <span className="stat-label">Active Delivery Stops:</span>
-            <span className="stat-value" style={{ color: "#38bdf8" }}>{stops.length} locations</span>
-          </div>
-          <div className="stat-row" style={{ margin: "8px 0" }}>
+        {/* Spacious, Scrollable Parcel Weight Customizer with Custom Steppers */}
+        <div className="section-title" style={{ marginTop: "20px" }}>Parcel Weights & Stops ({stops.length})</div>
+        <div className="card" style={{ maxHeight: "420px", minHeight: "280px", overflowY: "auto", padding: "18px" }}>
+          {stops.map((stop, idx) => (
+            <div key={stop.id} className="stat-row" style={{ alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "14px" }}>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "0.85rem", color: "#0284c7" }}>{stop.id}</div>
+                <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "4px" }}>Lat/Lng: {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <button className="weight-btn" onClick={() => adjustWeight(idx, -0.5)} title="Decrease weight">-</button>
+                <input 
+                  type="number" 
+                  className="input-field" 
+                  value={stop.demand_weight} 
+                  onChange={(e) => updateStopWeight(idx, e.target.value)} 
+                  step="0.5" 
+                  min="0.1" 
+                  max="50"
+                  style={{ width: "65px", padding: "8px 6px", fontSize: "0.9rem", textAlign: "center" }}
+                />
+                <button className="weight-btn" onClick={() => adjustWeight(idx, 0.5)} title="Increase weight">+</button>
+                <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600", marginLeft: "2px" }}>kg</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card" style={{ marginTop: "12px" }}>
+          <div className="stat-row" style={{ margin: "4px 0" }}>
             <span className="stat-label">Max Bike Payload Limit:</span>
             <input 
               type="number" 
@@ -245,9 +356,9 @@ function App() {
               max="100"
             />
           </div>
-          <div className="stat-row" style={{ borderTop: "1px solid #374151", paddingTop: "8px" }}>
+          <div className="stat-row" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "8px" }}>
             <span className="stat-label">Live GPS Status:</span>
-            <span className="stat-value" style={{ color: "#34d399", fontSize: "0.8rem" }}>{gpsStatus}</span>
+            <span className="stat-value" style={{ color: "#16a34a", fontSize: "0.8rem" }}>{gpsStatus}</span>
           </div>
         </div>
 
@@ -284,7 +395,7 @@ function App() {
                   <b>{r.vehicle_id}</b>
                   <span style={{ color: COLORS[idx % COLORS.length], fontWeight: "600" }}>{r.total_distance_km} km</span>
                 </div>
-                <div className="stat-row" style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+                <div className="stat-row" style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
                   <span>Load: {r.total_load} / {r.capacity} kg</span>
                 </div>
                 <div className="route-path">
@@ -295,6 +406,47 @@ function App() {
           </React.Fragment>
         )}
       </div>
+
+      {/* Algorithm Explanation Modal */}
+      {showModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(7, 9, 14, 0.8)", backdropFilter: "blur(8px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ background: "rgba(17, 24, 39, 0.95)", border: "1px solid rgba(56, 189, 248, 0.3)", borderRadius: "16px", width: "100%", maxWidth: "650px", maxHeight: "85vh", overflowY: "auto", padding: "28px", boxShadow: "0 20px 40px rgba(0,0,0,0.8)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
+              <h2 style={{ fontSize: "1.25rem", color: "#38bdf8", fontWeight: "800" }}>🧠 How CVRP + 2-Opt Works</h2>
+              <button onClick={() => setShowModal(false)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "32px", height: "32px", borderRadius: "50%", cursor: "pointer", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            </div>
+
+            <div style={{ fontSize: "0.88rem", lineHeight: "1.6", color: "#cbd5e1" }}>
+              <p style={{ marginBottom: "12px" }}>
+                The <b style={{ color: "#38bdf8" }}>ChakravyuhBreaker</b> routing engine combines two robust optimization techniques to solve complex multi-vehicle delivery challenges efficiently:
+              </p>
+
+              <div style={{ background: "rgba(30, 41, 59, 0.6)", borderLeft: "4px solid #38bdf8", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "12px" }}>
+                <b style={{ color: "#f8fafc" }}>1. CVRP (Capacitated Vehicle Routing Problem):</b>
+                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#94a3b8" }}>
+                  CVRP ensures that no delivery vehicle exceeds its maximum weight payload limit (e.g., 15 kg). The engine greedily assigns customer orders to available bikes based on spatial proximity while strictly validating total weight constraints per tour.
+                </p>
+              </div>
+
+              <div style={{ background: "rgba(30, 41, 59, 0.6)", borderLeft: "4px solid #10b981", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "16px" }}>
+                <b style={{ color: "#f8fafc" }}>2. 2-Opt Local Search Heuristic:</b>
+                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#94a3b8" }}>
+                  Once initial routes are clustered, the 2-Opt algorithm iteratively scans each vehicle's path. If two route edges cross each other (creating inefficient detours), it uncrosses them by reversing the segment order, completely eliminating self-intersections and minimizing total travel distance.
+                </p>
+              </div>
+
+              <div style={{ fontSize: "0.82rem", color: "#38bdf8", background: "rgba(56, 189, 248, 0.1)", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+                ⚡ <b>Bonus Performance Feature:</b> Results are indexed using spatial QuadTrees and cached with Redis lookup logic to guarantee lightning-fast response times.
+              </div>
+            </div>
+
+            <button onClick={() => setShowModal(false)} className="btn btn-primary" style={{ marginTop: "20px" }}>
+              Got It, Close Guide
+            </button>
+          </div>
+        </div>
+      )}
+
       <div id="map-container"><div id="map"></div></div>
     </React.Fragment>
   );
