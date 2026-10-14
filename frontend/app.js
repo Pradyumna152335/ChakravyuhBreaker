@@ -28,6 +28,20 @@ function App() {
       zoom: 11.5
     });
 
+    // Make state and country borders bold when map loads
+    map.on("load", () => {
+      const layers = map.getStyle().layers;
+      layers.forEach((layer) => {
+        if (layer.id.includes("boundary") || layer.id.includes("admin") || layer.id.includes("state") || layer.id.includes("country")) {
+          if (layer.type === "line") {
+            map.setPaintProperty(layer.id, "line-width", 2.5);
+            map.setPaintProperty(layer.id, "line-color", "#64748b");
+            map.setPaintProperty(layer.id, "line-opacity", 0.85);
+          }
+        }
+      });
+    });
+
     map.on("click", (e) => {
       const newId = `ORD-${Math.floor(205 + Math.random() * 794)}`;
       setStops((prev) => [
@@ -69,7 +83,7 @@ function App() {
       el.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
       el.innerHTML = `
         <div style="background:#ea580c;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px #ea580c;flex-shrink:0;"></div>
-        <div style="background:rgba(15, 23, 42, 0.85);color:#38bdf8;padding:2px 6px;border-radius:4px;font-size:0.72rem;font-weight:700;border:1px solid rgba(56,189,248,0.3);white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.3);">${s.id}</div>
+        <div style="background:rgba(255, 255, 255, 0.95);color:#0284c7;padding:2px 6px;border-radius:4px;font-size:0.72rem;font-weight:700;border:1px solid rgba(2,132,199,0.3);white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.08);">${s.id}</div>
       `;
       
       const m = new maplibregl.Marker({ element: el, anchor: "left" })
@@ -273,8 +287,8 @@ function App() {
   return (
     <React.Fragment>
       <div id="sidebar">
-        {/* Creator Profile Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", paddingBottom: "14px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        {/* Creator Profile Header with Professional Links */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", paddingBottom: "14px", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
           <img 
             src="https://github.com/Pradyumna152335.png" 
             alt="Pradyumna Tripathi" 
@@ -282,8 +296,17 @@ function App() {
             onError={(e) => { e.target.src = "https://ui-avatars.com/api/?name=Pradyumna+Tripathi&background=0284c7&color=fff"; }}
           />
           <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "#f8fafc" }}>Pradyumna Tripathi</div>
-            <div style={{ fontSize: "0.75rem", color: "#0284c7" }}>Lead Software Engineer</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "#0f172a" }}>Pradyumna Tripathi</div>
+            <div style={{ fontSize: "0.75rem", color: "#0284c7", marginBottom: "4px" }}>Software Engineer</div>
+            <div style={{ display: "flex", gap: "10px", fontSize: "0.72rem", fontWeight: "600" }}>
+              <a href="https://www.linkedin.com/in/pradyumnatripathi/" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "none" }}>LinkedIn</a>
+              <span style={{ color: "#cbd5e1" }}>•</span>
+              <a href="https://github.com/Pradyumna152335" target="_blank" rel="noopener noreferrer" style={{ color: "#0f172a", textDecoration: "none" }}>GitHub</a>
+              <span style={{ color: "#cbd5e1" }}>•</span>
+              <a href="https://leetcode.com/u/tripathi152335/" target="_blank" rel="noopener noreferrer" style={{ color: "#d97706", textDecoration: "none" }}>LeetCode</a>
+              <span style={{ color: "#cbd5e1" }}>•</span>
+              <a href="https://drive.google.com/file/d/1n6fUsj56iwUAkDF5QzIgpTlJ4RZVmDbj/view?usp=sharing" target="_blank" rel="noopener noreferrer" style={{ color: "#dc2626", textDecoration: "none" }}>Resume</a>
+            </div>
           </div>
         </div>
 
@@ -320,10 +343,10 @@ function App() {
         <div className="section-title" style={{ marginTop: "20px" }}>Parcel Weights & Stops ({stops.length})</div>
         <div className="card" style={{ maxHeight: "420px", minHeight: "280px", overflowY: "auto", padding: "18px" }}>
           {stops.map((stop, idx) => (
-            <div key={stop.id} className="stat-row" style={{ alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "14px" }}>
+            <div key={stop.id} className="stat-row" style={{ alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: "14px" }}>
               <div>
                 <div style={{ fontWeight: "700", fontSize: "0.85rem", color: "#0284c7" }}>{stop.id}</div>
-                <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "4px" }}>Lat/Lng: {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}</div>
+                <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: "4px" }}>Lat/Lng: {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <button className="weight-btn" onClick={() => adjustWeight(idx, -0.5)} title="Decrease weight">-</button>
@@ -338,7 +361,7 @@ function App() {
                   style={{ width: "65px", padding: "8px 6px", fontSize: "0.9rem", textAlign: "center" }}
                 />
                 <button className="weight-btn" onClick={() => adjustWeight(idx, 0.5)} title="Increase weight">+</button>
-                <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600", marginLeft: "2px" }}>kg</span>
+                <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: "600", marginLeft: "2px" }}>kg</span>
               </div>
             </div>
           ))}
@@ -356,7 +379,7 @@ function App() {
               max="100"
             />
           </div>
-          <div className="stat-row" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "8px" }}>
+          <div className="stat-row" style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: "8px", marginTop: "8px" }}>
             <span className="stat-label">Live GPS Status:</span>
             <span className="stat-value" style={{ color: "#16a34a", fontSize: "0.8rem" }}>{gpsStatus}</span>
           </div>
@@ -392,10 +415,10 @@ function App() {
             {result.fleet_routes.map((r, idx) => (
               <div className="route-card" key={r.vehicle_id} style={{ borderLeftColor: COLORS[idx % COLORS.length] }}>
                 <div className="stat-row">
-                  <b>{r.vehicle_id}</b>
+                  <b style={{ color: "#0f172a" }}>{r.vehicle_id}</b>
                   <span style={{ color: COLORS[idx % COLORS.length], fontWeight: "600" }}>{r.total_distance_km} km</span>
                 </div>
-                <div className="stat-row" style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                <div className="stat-row" style={{ fontSize: "0.78rem", color: "#64748b" }}>
                   <span>Load: {r.total_load} / {r.capacity} kg</span>
                 </div>
                 <div className="route-path">
@@ -409,33 +432,33 @@ function App() {
 
       {/* Algorithm Explanation Modal */}
       {showModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(7, 9, 14, 0.8)", backdropFilter: "blur(8px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div style={{ background: "rgba(17, 24, 39, 0.95)", border: "1px solid rgba(56, 189, 248, 0.3)", borderRadius: "16px", width: "100%", maxWidth: "650px", maxHeight: "85vh", overflowY: "auto", padding: "28px", boxShadow: "0 20px 40px rgba(0,0,0,0.8)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
-              <h2 style={{ fontSize: "1.25rem", color: "#38bdf8", fontWeight: "800" }}>🧠 How CVRP + 2-Opt Works</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: "32px", height: "32px", borderRadius: "50%", cursor: "pointer", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(8px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ background: "#ffffff", border: "1px solid rgba(2, 132, 199, 0.3)", borderRadius: "16px", width: "100%", maxWidth: "650px", maxHeight: "85vh", overflowY: "auto", padding: "28px", boxShadow: "0 20px 40px rgba(0,0,0,0.15)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(0,0,0,0.08)", paddingBottom: "12px" }}>
+              <h2 style={{ fontSize: "1.25rem", color: "#0284c7", fontWeight: "800" }}>🧠 How CVRP + 2-Opt Works</h2>
+              <button onClick={() => setShowModal(false)} style={{ background: "rgba(0,0,0,0.05)", border: "none", color: "#334155", width: "32px", height: "32px", borderRadius: "50%", cursor: "pointer", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
 
-            <div style={{ fontSize: "0.88rem", lineHeight: "1.6", color: "#cbd5e1" }}>
+            <div style={{ fontSize: "0.88rem", lineHeight: "1.6", color: "#334155" }}>
               <p style={{ marginBottom: "12px" }}>
-                The <b style={{ color: "#38bdf8" }}>ChakravyuhBreaker</b> routing engine combines two robust optimization techniques to solve complex multi-vehicle delivery challenges efficiently:
+                The <b style={{ color: "#0284c7" }}>ChakravyuhBreaker</b> routing engine combines two robust optimization techniques to solve complex multi-vehicle delivery challenges efficiently:
               </p>
 
-              <div style={{ background: "rgba(30, 41, 59, 0.6)", borderLeft: "4px solid #38bdf8", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "12px" }}>
-                <b style={{ color: "#f8fafc" }}>1. CVRP (Capacitated Vehicle Routing Problem):</b>
-                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#94a3b8" }}>
+              <div style={{ background: "rgba(241, 245, 249, 0.8)", borderLeft: "4px solid #0284c7", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "12px" }}>
+                <b style={{ color: "#0f172a" }}>1. CVRP (Capacitated Vehicle Routing Problem):</b>
+                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#64748b" }}>
                   CVRP ensures that no delivery vehicle exceeds its maximum weight payload limit (e.g., 15 kg). The engine greedily assigns customer orders to available bikes based on spatial proximity while strictly validating total weight constraints per tour.
                 </p>
               </div>
 
-              <div style={{ background: "rgba(30, 41, 59, 0.6)", borderLeft: "4px solid #10b981", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "16px" }}>
-                <b style={{ color: "#f8fafc" }}>2. 2-Opt Local Search Heuristic:</b>
-                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#94a3b8" }}>
+              <div style={{ background: "rgba(241, 245, 249, 0.8)", borderLeft: "4px solid #10b981", padding: "12px 14px", borderRadius: "0 8px 8px 0", marginBottom: "16px" }}>
+                <b style={{ color: "#0f172a" }}>2. 2-Opt Local Search Heuristic:</b>
+                <p style={{ marginTop: "4px", fontSize: "0.83rem", color: "#64748b" }}>
                   Once initial routes are clustered, the 2-Opt algorithm iteratively scans each vehicle's path. If two route edges cross each other (creating inefficient detours), it uncrosses them by reversing the segment order, completely eliminating self-intersections and minimizing total travel distance.
                 </p>
               </div>
 
-              <div style={{ fontSize: "0.82rem", color: "#38bdf8", background: "rgba(56, 189, 248, 0.1)", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)" }}>
+              <div style={{ fontSize: "0.82rem", color: "#0284c7", background: "rgba(2, 132, 199, 0.08)", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(2, 132, 199, 0.2)" }}>
                 ⚡ <b>Bonus Performance Feature:</b> Results are indexed using spatial QuadTrees and cached with Redis lookup logic to guarantee lightning-fast response times.
               </div>
             </div>
