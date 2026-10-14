@@ -1,0 +1,29 @@
+﻿version: "3.9"
+
+services:
+  routing-engine:
+    build: .
+    container_name: chakravyuh-engine
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  redis:
+    image: redis:7-alpine
+    container_name: chakravyuh-redis
+    ports:
+      - "6379:6379"
+
+  postgis:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: chakravyuh-postgis
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chakravyuh_gis
+    ports:
+      - "5432:5432"

@@ -1,4 +1,4 @@
-﻿# ChakravyuhBreaker: Real-Time Dynamic Delivery & Multi-Stop Route Optimizer
+# ChakravyuhBreaker: Real-Time Dynamic Delivery & Multi-Stop Route Optimizer
 
 **ChakravyuhBreaker** is a high-throughput logistics dispatch and graph routing engine designed to solve the **Capacitated Vehicle Routing Problem (CVRP)** under dynamic urban traffic and strict delivery time-window constraints.
 
@@ -8,10 +8,7 @@
 * **Frontend:** React, MapLibre GL Interactive Map Dashboard
 
 ## Quick Start
-`ash
-git clone [https://github.com/Pradyumna152335/ChakravyuhBreaker.git](https://github.com/Pradyumna152335/ChakravyuhBreaker.git)
-cd ChakravyuhBreaker
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/Pradyumna152335/ChakravyuhBreaker.git](https://github.com/Pradyumna152335/ChakravyuhBreaker.git)
